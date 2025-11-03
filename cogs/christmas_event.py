@@ -20,7 +20,8 @@ class ChristmasEvent(commands.Cog):
         
         # Configuration
         self.drop_channel_id = int(os.getenv("DROP_CHANNEL_ID", "0"))
-        self.spam_channel_ids = [int(os.getenv("SPAM_CHANNEL_ID", "0"))]
+        spam_channels = os.getenv("SPAM_CHANNEL_IDS", "")
+        self.spam_channel_ids = [int(cid.strip()) for cid in spam_channels.split(",") if cid.strip().isdigit()]
         
         # Activity tracking
         self.activity_tracker = defaultdict(lambda: {"users": set(), "count": 0, "last_drop": 0})
@@ -152,6 +153,8 @@ class ChristmasEvent(commands.Cog):
                 if button_id == self.active_slot:
                     # First-click priority: mark claimed BEFORE any awaits to reduce race window
                     self.claimed = True
+                    for child in self.children:
+                        child.disabled = True
 
                     # Acknowledge the interaction immediately to avoid "interaction failed"
                     try:
@@ -252,7 +255,7 @@ class ChristmasEvent(commands.Cog):
             if current_time - tracker["last_drop"] < self.drop_cooldown:
                 return
             
-            tracker["last_drop"] = current_time
+            tracker["last_drop"] = time.time()
             tracker["users"].clear()
             tracker["count"] = 0
             
