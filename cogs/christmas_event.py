@@ -19,8 +19,8 @@ class ChristmasEvent(commands.Cog):
         self.bot = bot
         
         # Configuration
-        self.drop_channel_id = "1305913919172247612"
-        self.spam_channel_ids = "1308740750833356860, 1308980761218519050, 1396014059316580362, 1378636526510014565, 1378638483047846038, 1368261799350370426, 1366254955668967475, 1365639876476797001, 1365564901258563624, 1308786117469929492, 1319684125229191218, 1314903620990537789, 1367121682594140301, 1379093415232536676, 1378636373250281472, 1378636436646920242, 1378637966292946964, 1305916255294984223"
+        self.drop_channel_id = int(os.getenv("DROP_CHANNEL_ID", "0"))
+        self.spam_channel_ids = [int(os.getenv("SPAM_CHANNEL_ID", "0"))]
         
         # Activity tracking
         self.activity_tracker = defaultdict(lambda: {"users": set(), "count": 0, "last_drop": 0})
@@ -30,15 +30,15 @@ class ChristmasEvent(commands.Cog):
         
         # Drop configuration
         self.drop_types = [
-            {"name": "🎅 Santa Claus", "emoji": "🎅", "gifts": 3, "weight": 5},
-            {"name": "🎄 Christmas Tree", "emoji": "🎄", "gifts": 1, "weight": 50},
-            {"name": "🪨 Coal", "emoji": "🪨", "gifts": -1, "weight": 35},
-            {"name": "👺 Grinch", "emoji": "👺", "gifts": -3, "weight": 10}
+            {"name": "Santa Claus", "emoji": "🎅", "gifts": +3, "weight": 5},
+            {"name": "Christmas Tree", "emoji": "🎄", "gifts": +1, "weight": 50},
+            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 35},
+            {"name": "Grinch", "emoji": "👺", "gifts": -3, "weight": 10}
         ]
         
         # Activity settings
         self.min_messages = 10
-        self.max_messages = 15
+        self.max_messages = 20
         self.min_unique_users = 2
         self.same_user_cooldown = 3
         self.drop_cooldown = 15
@@ -52,17 +52,17 @@ class ChristmasEvent(commands.Cog):
     
     @tasks.loop(hours=1)
     async def check_event_status(self):
-        """Check if the event should be active (Nov 1 - Dec 25)"""
+        """Check if the event should be active (Nov 1 - Dec 24)"""
         now = datetime.now()
         
-        if (now.month == 11) or (now.month == 12 and now.day < 25):
+        if (now.month == 11) or (now.month == 12 and now.day < 24):
             if not self.event_active:
                 self.event_active = True
                 print("🎄 Christmas event is now ACTIVE!")
-        elif now.month == 12 and now.day == 25 and now.hour == 0:
+        elif now.month == 12 and now.day == 24 and now.hour == 0:
             if self.event_active:
                 self.event_active = False
-                print("🎄 Christmas event has ENDED! Merry Christmas!")
+                print("🎄 Christmas event has ENDED! Happy Holidays!")
         else:
             if self.event_active:
                 self.event_active = False
@@ -98,7 +98,7 @@ class ChristmasEvent(commands.Cog):
     # Gift Drop View
     class GiftDropView(View):
         def __init__(self, cog, drop_type, active_slot, message):
-            super().__init__(timeout=10)  # 15 second timeout
+            super().__init__(timeout=30)  # 30 second timeout
             self.cog = cog
             self.drop_type = drop_type
             self.active_slot = active_slot
@@ -109,10 +109,7 @@ class ChristmasEvent(commands.Cog):
                 if i == active_slot:
                     # Only the active slot is visible and clickable
                     # Show the actual drop emoji on the active button so users can see which item
-                    try:
-                        btn_emoji = self.drop_type.get("emoji") or "🎁"
-                    except Exception:
-                        btn_emoji = "🎁"
+                    btn_emoji = "🎁"
                     button = Button(
                         style=discord.ButtonStyle.primary,
                         emoji=btn_emoji,
@@ -179,10 +176,18 @@ class ChristmasEvent(commands.Cog):
                         original_desc = "# 🎁 A gift just appeared!\n\nBe quick before someone else collects it!"
 
                     gifts_amount = self.drop_type.get("gifts", 0)
-                    sign = "+" if gifts_amount > 0 else ""
-                    item_name = f"{self.drop_type.get('emoji','')} {self.drop_type.get('name','gift')}"
+                    item_emoji = f"{self.drop_type.get('emoji','')}"
+                    item_name = f"{self.drop_type.get('name','gift')}"
+                    if item_name == "Santa Claus":
+                        message_text = "Ho ho ho! You are on the nice list! You got a special gift!"
+                    elif item_name == "Christmas Tree":
+                        message_text = "That's a lovely gift to brighten the season!"
+                    elif item_name == "Coal":
+                        message_text = "Oops! Looks like you're on the naughty list this year!"
+                    elif item_name == "Grinch":
+                        message_text = "Oh no! The Grinch got you! Better luck next time!"
                     # Match screenshot-style message: mention + brief text + badge-like +N
-                    claim_line = f"\n\n{interaction.user.mention} just collected a {item_name}! {sign}{gifts_amount} {self.drop_type.get('emoji','')}"
+                    claim_line = f"\n\n{interaction.user.mention} just collected a {item_name}! `{gifts_amount}`🎁. {message_text} "
 
                     updated_description = original_desc + claim_line
                     updated_embed = discord.Embed(description=updated_description, color=0x00FF00)
@@ -208,8 +213,8 @@ class ChristmasEvent(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
        # Temporarily disabled for testing - remove this comment and uncomment below for production
-        #  if not self.is_event_active():
-        #    return
+        if not self.is_event_active():
+            return
         
         if message.author.bot:
             return
@@ -256,10 +261,18 @@ class ChristmasEvent(commands.Cog):
             
             # Create embed with description including the drop item and its gift value
             gifts_amount = drop.get("gifts", 0)
-            sign = "+" if gifts_amount > 0 else ""
-            item_name = f"{drop.get('emoji','')} {drop.get('name','gift')}"
+            item_emoji = f"{drop.get('emoji','')}"
+            item_name = f"{drop.get('name','gift')}"
+            if item_name == "Santa Claus":
+                message_text = "Ho ho ho! A special visitor has arrived! Hurry and collect it before he goes away!"
+            elif item_name == "Christmas Tree":
+                message_text = "Grab it quickly before anyone to add some cheer!"
+            elif item_name == "Coal":
+                message_text = "Uh oh! This is not the gift that I wanted!"
+            elif item_name == "Grinch":
+                message_text = "Yikes! The Grinch is here! Better hide those gifts away!"
             embed = discord.Embed(
-                description=f"# 🎁 A gift just appeared!\n\n{item_name} — {sign}{gifts_amount} {'gift' if abs(gifts_amount)==1 else 'gifts'}!\n\nBe quick before someone else collects it!",
+                description=f"# {item_emoji} A {item_name} just appeared!\n\n{message_text} `{gifts_amount}`🎁",
                 color=0xFF0000
             )
             
@@ -283,8 +296,7 @@ class ChristmasEvent(commands.Cog):
         top_10 = sorted_users[:10]
 
         embed = discord.Embed(
-            title="🎄 Christmas Gift Leaderboard 🎄",
-            description="Top gift collectors this season!",
+            description="""## 🎄 Christmas Gift Leaderboard 🎄""",
             color=0x00FF00
         )
 
@@ -305,18 +317,11 @@ class ChristmasEvent(commands.Cog):
         user_id_str = str(interaction.user.id)
         user_gifts = counts.get(user_id_str, 0)
         user_rank = next((i for i, (uid, _) in enumerate(sorted_users, 1) if uid == user_id_str), None)
-        if user_gifts:
-            embed.add_field(
-                name="Your Stats",
-                value=f"Rank: **#{user_rank}** | Gifts: **{user_gifts}** 🎁",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="Your Stats",
-                value="You haven't collected any gifts yet! 🎁",
-                inline=False
-            )
+        embed.add_field(
+            name="Your Stats",
+            value=f"-# Rank: **#{user_rank}** | Gifts: **{user_gifts}** 🎁",
+            inline=False
+        )
 
         await interaction.followup.send(embed=embed)
     
@@ -341,7 +346,7 @@ class ChristmasEvent(commands.Cog):
         if self.is_event_active():
             await interaction.response.send_message("🎄 The Christmas event is currently **ACTIVE**!")
         else:
-            await interaction.response.send_message("❄️ The Christmas event is currently **INACTIVE**. Event runs Nov 1 - Dec 25.")
+            await interaction.response.send_message("❄️ The Christmas event is currently **INACTIVE**. Event runs Nov 1 - Dec 24.")
 
 async def setup(bot):
     await bot.add_cog(ChristmasEvent(bot))

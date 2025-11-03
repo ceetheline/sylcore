@@ -1,3 +1,10 @@
 {
-
+    "gifts": {
+    "1377237307651788811": 5,
+    "1236733648963637328": 1
+},
+    "history": {
+        "1377237307651788811": [ { "amount": 3, "drop": "🎅 Santa Claus" }, { "amount": 1, "drop": "🎄 Christmas Tree" }, { "amount": 1, "drop": "🎄 Christmas Tree" } ],
+        "1236733648963637328": [ { "amount": -1, "drop": "Coal" }, { "amount": 1, "drop": "Christmas Tree" }, { "amount": 1, "drop": "Christmas Tree" } ]
+    }
 }

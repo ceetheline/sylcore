@@ -13,8 +13,6 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-
 @bot.event
 async def on_ready():
     print(f"✅ Bot is online!")
@@ -93,7 +91,7 @@ async def sync(ctx):
 async def main():
     async with bot:
         await load_cogs()
-        await bot.start(TOKEN)
+        await bot.start(os.getenv("DISCORD_TOKEN"))
 
 
 
