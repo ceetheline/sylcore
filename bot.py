@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import os
 import asyncio
-<<<<<<< HEAD
 from dotenv import load_dotenv
 
 load_dotenv()
