@@ -1,0 +1,5 @@
+discord.py
+psutil
+python-dotenv
+py-cord
+flask
