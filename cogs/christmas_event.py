@@ -59,7 +59,7 @@ class ChristmasEvent(commands.Cog):
             if not self.event_active:
                 self.event_active = True
                 print("🎄 Christmas event is now ACTIVE!")
-        elif now.month == 12 and now.day == 24 and now.hour == 0:
+        elif now.month == 12 and now.day == 24 and now.hour == 12:
             if self.event_active:
                 self.event_active = False
                 print("🎄 Christmas event has ENDED! Happy Holidays!")

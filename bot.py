@@ -19,6 +19,24 @@ async def on_ready():
     print(f"Logged in as: {bot.user.name} ({bot.user.id})")
     print(f"Connected to {len(bot.guilds)} server(s)")
 
+    activity_name = os.getenv("DISCORD_ACTIVITY_NAME")
+    activity_type = os.getenv("DISCORD_ACTIVITY_TYPE")
+
+    activity_types = {
+        "Playing": discord.ActivityType.playing,
+        "Watching": discord.ActivityType.watching,
+        "Listening": discord.ActivityType.listening,
+        "Competing": discord.ActivityType.competing,
+    }
+
+    activity = discord.Activity(
+        name=activity_name,
+        type=activity_types.get(activity_type, discord.ActivityType.watching)
+    )
+
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+    print(f"✅ Bot is online as {bot.user} with activity '{activity_name}' ({activity_type})")
+
     if not hasattr(bot, "synced"):  # only sync once
         try:
             synced = await bot.tree.sync()
