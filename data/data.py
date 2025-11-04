@@ -1,108 +1,139 @@
 import os
 import datetime
-import threading
-import requests
 from typing import Dict, Any, List
+from supabase import create_client, Client
 
-# JSONStorage API endpoint
-JSON_STORAGE_URL = os.getenv("JSON_STORAGE_URL")
+# ────────────────────────────────
+# Setup Supabase client
+# ────────────────────────────────
 
-# In-memory structures
+SUPABASE_URL = os.getenv("PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("PUBLIC_SUPABASE_ANON_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError("Supabase credentials not set in environment variables.")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ────────────────────────────────
+# In-memory cache (optional)
+# ────────────────────────────────
 gifts: Dict[str, int] = {}
 history: Dict[str, List[Dict[str, Any]]] = {}
 
-# Thread lock to prevent race conditions during saves
-_save_lock = threading.Lock()
 
-def _fetch_remote_data():
-    """Fetch data from JSONStorage (remote persistence)."""
-    if not JSON_STORAGE_URL:
-        print("[data] JSON_STORAGE_URL not set. Data won't persist remotely.")
-        return {"gifts": {}, "history": {}}
-    try:
-        resp = requests.get(JSON_STORAGE_URL, timeout=10)
-        if resp.status_code == 200:
-            return resp.json()
-        print(f"[data] Failed to fetch remote data: HTTP {resp.status_code}")
-    except Exception as e:
-        print(f"[data] Exception while fetching data: {e}")
-    return {"gifts": {}, "history": {}}
-
-def _push_remote_data(data):
-    """Push full updated data to JSONStorage (thread-safe)."""
-    if not JSON_STORAGE_URL:
-        print("[data] JSON_STORAGE_URL not set. Skipping remote save.")
-        return
-    with _save_lock:
-        try:
-            resp = requests.put(
-                JSON_STORAGE_URL,
-                json=data,
-                headers={"Content-Type": "application/json"},
-                timeout=10
-            )
-            print(f"[data] Saved remotely: HTTP {resp.status_code}")
-        except Exception as e:
-            print(f"[data] Failed to push data remotely: {e}")
+# ────────────────────────────────
+# Database Operations
+# ────────────────────────────────
 
 def load_data():
-    """Load JSON data from remote into memory."""
+    """Load all users and history from Supabase."""
     global gifts, history
-    data = _fetch_remote_data()
-    gifts = {str(uid): int(v) for uid, v in data.get("gifts", {}).items()}
-    history = {}
-    for uid, entries in data.get("history", {}).items():
-        history[str(uid)] = [
-            {
-                "amount": int(e.get("amount", 0)),
-                "drop": e.get("drop", "")
+    print("[data] Loading data from Supabase...")
+
+    users_resp = supabase.table("users").select("*").execute()
+    hist_resp = supabase.table("gift_history").select("*").execute()
+
+    if users_resp.data:
+        gifts = {str(u["user_id"]): int(u["total"]) for u in users_resp.data}
+    else:
+        gifts = {}
+
+    history.clear()
+    if hist_resp.data:
+        for e in hist_resp.data:
+            uid = str(e["user_id"])
+            entry = {
+                "amount": e["amount"],
+                "drop": e.get("drop_name", ""),
+                "created_at": e.get("created_at", "")
             }
-            for e in entries
-        ]
-    print(f"[data] Loaded {len(gifts)} users from JSONStorage")
+            history.setdefault(uid, []).append(entry)
+
+    print(f"[data] Loaded {len(gifts)} users and {len(hist_resp.data)} history entries.")
+
 
 def save_data():
-    """Save in-memory data to JSONStorage."""
-    formatted = {
-        "gifts": gifts,
-        "history": history
-    }
-    _push_remote_data(formatted)
+    """Push current in-memory data to Supabase (sync back)."""
+    print("[data] Saving all users to Supabase...")
+
+    for uid, total in gifts.items():
+        supabase.table("users").upsert({
+            "user_id": uid,
+            "total": total,
+            "updated_at": datetime.datetime.utcnow().isoformat()
+        }).execute()
+
+    print("[data] Users upserted successfully.")
+
 
 def record_gift(user_id: int, amount: int, drop_name: str = None) -> int:
-    """Record a gift and save to remote storage."""
+    """Record a gift for a user and persist immediately."""
     uid = str(user_id)
     gifts[uid] = gifts.get(uid, 0) + int(amount)
+
+    # Insert into gift_history
+    supabase.table("gift_history").insert({
+        "user_id": uid,
+        "amount": amount,
+        "drop_name": drop_name or "",
+        "created_at": datetime.datetime.utcnow().isoformat()
+    }).execute()
+
+    # Update users table
+    supabase.table("users").upsert({
+        "user_id": uid,
+        "total": gifts[uid],
+        "updated_at": datetime.datetime.utcnow().isoformat()
+    }).execute()
+
+    # Update in-memory cache
     entry = {
         "amount": int(amount),
-        "drop": drop_name or ""
+        "drop": drop_name or "",
+        "created_at": datetime.datetime.utcnow().isoformat()
     }
     history.setdefault(uid, []).append(entry)
-    print(f"[data] record_gift: uid={uid} amount={amount} new_total={gifts[uid]} entries={len(history.get(uid, []))}")
-    save_data()
+
+    print(f"[data] record_gift: uid={uid} amount={amount} new_total={gifts[uid]}")
     return gifts[uid]
 
+
 def get_user_total(user_id: int) -> int:
-    return int(gifts.get(str(user_id), 0))
+    uid = str(user_id)
+    if uid in gifts:
+        return gifts[uid]
+    resp = supabase.table("users").select("total").eq("user_id", uid).execute()
+    if resp.data:
+        gifts[uid] = int(resp.data[0]["total"])
+        return gifts[uid]
+    return 0
+
 
 def get_leaderboard(limit: int = 10) -> List[tuple]:
-    items = sorted(((int(uid), cnt) for uid, cnt in gifts.items()), key=lambda x: x[1], reverse=True)
-    return items[:limit]
+    resp = supabase.table("users").select("user_id, total").order("total", desc=True).limit(limit).execute()
+    if not resp.data:
+        return []
+    return [(int(row["user_id"]), row["total"]) for row in resp.data]
+
 
 def get_user_history(user_id: int, limit: int = None) -> List[Dict[str, Any]]:
     uid = str(user_id)
-    entries = history.get(uid, [])
+    query = supabase.table("gift_history").select("*").eq("user_id", uid).order("created_at", desc=True)
     if limit:
-        return entries[-limit:]
-    return entries
+        query = query.limit(limit)
+    resp = query.execute()
+    return resp.data or []
+
 
 def reset():
-    """Dangerous helper: clear in-memory and reset remote."""
-    global gifts, history
+    """Dangerous helper: clear all data in Supabase tables."""
+    supabase.table("gift_history").delete().neq("id", 0).execute()
+    supabase.table("users").delete().neq("user_id", "").execute()
     gifts.clear()
     history.clear()
-    save_data()
-    print("[data] Reset all data")
+    print("[data] Reset all Supabase data.")
 
-# Load on import
+
+# Load once on import
 load_data()
