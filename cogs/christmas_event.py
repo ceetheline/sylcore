@@ -17,7 +17,8 @@ load_dotenv()
 class ChristmasEvent(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        
+        self.data = data
+
         # Configuration
         self.drop_channel_id = int(os.getenv("DROP_CHANNEL_ID", "0"))
         spam_channels = os.getenv("SPAM_CHANNEL_IDS", "")
@@ -38,10 +39,10 @@ class ChristmasEvent(commands.Cog):
         ]
         
         # Activity settings
-        self.min_messages = 10
-        self.max_messages = 20
+        self.min_messages = 3
+        self.max_messages = 5
         self.min_unique_users = 2
-        self.same_user_cooldown = 3
+        self.same_user_cooldown = 1
         self.drop_cooldown = 15
         
         # Event active status
@@ -98,18 +99,17 @@ class ChristmasEvent(commands.Cog):
     
     # Gift Drop View
     class GiftDropView(View):
-        def __init__(self, cog, drop_type, active_slot, message):
-            super().__init__(timeout=30)  # 30 second timeout
+        def __init__(self, cog, drop_type, active_slot, message, data):
+            super().__init__(timeout=30)
             self.cog = cog
             self.drop_type = drop_type
             self.active_slot = active_slot
-            self.claimed = False
             self.message = message
-            
+            self.data = data
+            self.claimed = False
+
             for i in range(4):
                 if i == active_slot:
-                    # Only the active slot is visible and clickable
-                    # Show the actual drop emoji on the active button so users can see which item
                     btn_emoji = "🎁"
                     button = Button(
                         style=discord.ButtonStyle.primary,
@@ -119,99 +119,100 @@ class ChristmasEvent(commands.Cog):
                     )
                     button.callback = self.create_callback(i)
                 else:
-                    # Empty invisible slots
                     button = Button(
                         style=discord.ButtonStyle.secondary,
-                        label="\u200b",  # Zero-width space
+                        label="\u200b",
                         custom_id=f"empty_{i}",
                         disabled=True
                     )
                 self.add_item(button)
-        
+
         async def on_timeout(self):
-            """Called when the view times out (15 seconds)"""
             try:
                 await self.message.delete()
             except:
                 pass
-        
+
         def create_callback(self, button_id):
             async def callback(interaction: discord.Interaction):
                 if self.claimed:
-                    # Silently acknowledge the interaction without sending any new message
-                    # (keeps channel clean; the embed itself shows the claim)
+                    # Interaction already handled, just defer update silently
                     try:
-                        await interaction.response.defer_update()
-                    except Exception:
-                        # As a last resort, try to edit the message to remove components
+                        await interaction.response.defer()
+                    except:
+                        # Last resort, try editing message to remove buttons
                         try:
                             await interaction.response.edit_message(view=None)
-                        except Exception:
+                        except:
                             pass
                     return
-                
-                if button_id == self.active_slot:
-                    # First-click priority: mark claimed BEFORE any awaits to reduce race window
-                    self.claimed = True
-                    for child in self.children:
-                        child.disabled = True
 
-                    # Acknowledge the interaction immediately to avoid "interaction failed"
+                if button_id != self.active_slot:
+                    # Wrong button clicked: respond ephemeral to user
                     try:
-                        await interaction.response.defer_update()
-                    except Exception:
-                        # if deferring fails, continue and hope edit will succeed within 3s
+                        await interaction.response.send_message("That wasn't the right gift! 😢", ephemeral=True)
+                    except:
                         pass
+                    return
 
-                    # Record detailed gift event (amount, drop name, message & channel ids)
-                    # Run the blocking disk write in a thread to avoid blocking the event loop
+                # Mark claimed early to prevent race conditions
+                self.claimed = True
+                
+                # Disable buttons immediately
+                for child in self.children:
+                    child.disabled = True
+
+                # Always defer the update immediately to avoid interaction timeout
+                try:
+                    await interaction.response.defer()
+                except Exception as e:
+                    print(f"Error deferring interaction response: {e}")
+
+                # Run gift recording in a thread (blocking) but after defer
+                try:
                     new_total = await asyncio.to_thread(
-                        data.record_gift,
+                        self.data.record_gift,
                         interaction.user.id,
                         self.drop_type["gifts"],
                         self.drop_type.get("name"),
                     )
+                except Exception as e:
+                    print(f"Error recording gift: {e}")
+                    # Optionally notify user or log
+                
+                # Build claim log text
+                try:
+                    original_desc = self.message.embeds[0].description if self.message.embeds else ""
+                except Exception:
+                    original_desc = ""
+                
+                gifts_amount = self.drop_type.get("gifts", 0)
+                item_emoji = f"{self.drop_type.get('emoji', '')}"
+                item_name = f"{self.drop_type.get('name', 'gift')}"
+                messages = {
+                    "Santa Claus": "Ho ho ho! You are on the nice list! You got a special gift!",
+                    "Christmas Tree": "That's a lovely gift to brighten the season!",
+                    "Coal": "Oops! Looks like you're on the naughty list this year!",
+                    "Grinch": "Oh no! The Grinch got you! Better luck next time!",
+                }
+                message_text = messages.get(item_name, "")
+                claim_line = f"\n\n{interaction.user.mention} just collected a {item_name}! `{gifts_amount}`🎁. {message_text}"
 
-                    # Build an appended claim line and update the original embed (no extra messages)
+                updated_description = original_desc + claim_line
+                updated_embed = discord.Embed(description=updated_description, color=0x00FF00)
+
+                # Update the message with new embed and disable buttons
+                try:
+                    await self.message.edit(embed=updated_embed, view=self)
+                except Exception as e:
+                    print(f"Error editing message: {e}")
                     try:
-                        original_desc = self.message.embeds[0].description if self.message and self.message.embeds else "# 🎁 A gift just appeared!\n\nBe quick before someone else collects it!"
-                    except Exception:
-                        original_desc = "# 🎁 A gift just appeared!\n\nBe quick before someone else collects it!"
+                        await interaction.response.edit_message(embed=updated_embed, view=self)
+                    except Exception as e2:
+                        print(f"Fallback error editing message: {e2}")
 
-                    gifts_amount = self.drop_type.get("gifts", 0)
-                    item_emoji = f"{self.drop_type.get('emoji','')}"
-                    item_name = f"{self.drop_type.get('name','gift')}"
-                    if item_name == "Santa Claus":
-                        message_text = "Ho ho ho! You are on the nice list! You got a special gift!"
-                    elif item_name == "Christmas Tree":
-                        message_text = "That's a lovely gift to brighten the season!"
-                    elif item_name == "Coal":
-                        message_text = "Oops! Looks like you're on the naughty list this year!"
-                    elif item_name == "Grinch":
-                        message_text = "Oh no! The Grinch got you! Better luck next time!"
-                    # Match screenshot-style message: mention + brief text + badge-like +N
-                    claim_line = f"\n\n{interaction.user.mention} just collected a {item_name}! `{gifts_amount}`🎁. {message_text} "
-
-                    updated_description = original_desc + claim_line
-                    updated_embed = discord.Embed(description=updated_description, color=0x00FF00)
-
-                    # Edit the original message to append claim and remove buttons.
-                    # Editing the message object directly is the most reliable across discord.py versions.
-                    try:
-                        await self.message.edit(embed=updated_embed, view=None)
-                    except Exception:
-                        try:
-                            await interaction.response.edit_message(embed=updated_embed, view=None)
-                        except Exception:
-                            # last resort: try to edit via interaction.edit_original_message if available
-                            try:
-                                await interaction.edit_original_message(embed=updated_embed, view=None)
-                            except Exception:
-                                pass
-                else:
-                    await interaction.response.send_message("That wasn't the right gift! 😢", ephemeral=True)
-            
             return callback
+
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -281,7 +282,7 @@ class ChristmasEvent(commands.Cog):
             
             # Send message first, then create view with the message object
             sent_message = await message.channel.send(embed=embed)
-            view = self.GiftDropView(self, drop, active_slot, sent_message)
+            view = self.GiftDropView(self, drop, active_slot, sent_message, data)
             await sent_message.edit(view=view)
     
     @app_commands.command(name="leaderboard", description="Show the top 10 gift collectors")
