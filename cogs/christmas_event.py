@@ -69,7 +69,7 @@ class ChristmasEvent(commands.Cog):
             drop_message = messages.get(self.drop_type["name"], "You found something interesting!")
             
             self.container = ui.Container(ui.TextDisplay(f"# {drop_type['emoji']} A {drop_type['name']} just appeared!"))
-            self.container.add_item(ui.TextDisplay(f"{drop_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}`** {self.drop_type['gifts']}🎁"))
+            self.container.add_item(ui.TextDisplay(f"{drop_message} `**{'+' if self.drop_type['gifts'] > 0 else ''}** {self.drop_type['gifts']}`🎁"))
             self.container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.large, visible=True))
 
             # button row
@@ -84,11 +84,11 @@ class ChristmasEvent(commands.Cog):
                     )
 
                     async def make_callback(interaction: discord.Interaction, index=i):
-                        # tell Discord "got it" right away
-                        await interaction.response.defer()
-
-                        # now check and set the claim flag
                         if self.claimed:
+                            try:
+                                await interaction.response.defer()
+                            except:
+                                pass
                             return
 
                         self.claimed = True
@@ -130,10 +130,10 @@ class ChristmasEvent(commands.Cog):
 
                         new_container = ui.Container(
                             ui.TextDisplay(f"# {self.drop_type['emoji']} A {self.drop_type['name']} just appeared!"),
-                            ui.TextDisplay(f"{drop_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}`** {self.drop_type['gifts']}`**🎁"),
+                            ui.TextDisplay(f"{drop_message} `**{'+' if self.drop_type['gifts'] > 0 else ''}** {self.drop_type['gifts']}`🎁"),
                             ui.Separator(spacing=discord.SeparatorSpacing.large, visible=True),
                             ui.TextDisplay(
-                                f"🎉 {interaction.user.mention} claimed the {self.drop_type['emoji']} **{self.drop_type['name']}**! {append_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"
+                                f"🎉 {interaction.user.mention} claimed the {self.drop_type['emoji']} **{self.drop_type['name']}**! {append_message} `**{'+' if self.drop_type['gifts'] > 0 else ''}**{self.drop_type['gifts']}`🎁"
                             )
                         )
                         new_view = ui.LayoutView(timeout=None)
