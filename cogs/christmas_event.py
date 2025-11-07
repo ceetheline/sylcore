@@ -29,16 +29,16 @@ class ChristmasEvent(commands.Cog):
         # Drop config
         self.drop_types = [
             {"name": "Santa Claus", "emoji": "🎅", "gifts": +3, "weight": 5},
-            {"name": "Christmas Tree", "emoji": "🎄", "gifts": +1, "weight": 50},
-            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 35},
+            {"name": "Christmas Tree", "emoji": "🎄", "gifts": +1, "weight": 60},
+            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 25},
             {"name": "Grinch", "emoji": "👺", "gifts": -3, "weight": 10},
         ]
 
         # Settings
-        self.min_messages = 3
-        self.max_messages = 5
+        self.min_messages = 12
+        self.max_messages = 25
         self.min_unique_users = 2
-        self.same_user_cooldown = 1
+        self.same_user_cooldown = 3
         self.drop_cooldown = 15
         self.event_active = False
 

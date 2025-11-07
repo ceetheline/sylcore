@@ -29,6 +29,14 @@ async def on_ready():
 
     print("─" * 40)
 
+    await bot.change_presence(
+        activity=discord.Activity(
+            type=discord.ActivityType.watching,  # can be watching, playing, listening, etc.
+            name="over the gifts 👀"  # whatever you want it to show
+        )
+    )
+
+
 # Load all cogs from the 'cogs' folder
 async def load_cogs():
     for filename in os.listdir('./cogs'):
