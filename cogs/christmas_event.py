@@ -35,10 +35,10 @@ class ChristmasEvent(commands.Cog):
         ]
 
         # Settings
-        self.min_messages = 12
+        self.min_messages = 10
         self.max_messages = 25
         self.min_unique_users = 2
-        self.same_user_cooldown = 3
+        self.same_user_cooldown = 1
         self.drop_cooldown = 10
         self.event_active = False
 
@@ -57,6 +57,8 @@ class ChristmasEvent(commands.Cog):
             self.message = message
             self.data = data
             self.claimed = False
+            self.claim_window_open = False
+            self.pending_claims = set()
 
             # container layout
             messages = {
@@ -91,88 +93,25 @@ class ChristmasEvent(commands.Cog):
                                 pass
                             return
 
-                        self.claimed = True
+                        # start claim window if not started
+                        if not self.claim_window_open:
+                            self.claim_window_open = True
+                            self.pending_claims = set()
 
-                        # instantly disable all buttons so no one else can click
-                        for child in self.container.children:
-                            if isinstance(child, ui.ActionRow):
-                                for btn in child.children:
-                                    btn.disabled = True
+                            async def claim_window():
+                                await asyncio.sleep(0.35)  # wait for others to click
+                                await self.finish_claim()  # <-- only call here, after window
 
-                        # record gift in a thread-safe way
-                        await asyncio.to_thread(
-                            self.data.record_gift,
-                            interaction.user.id,
-                            self.drop_type["gifts"],
-                            self.drop_type.get("name"),
-                        )
+                            asyncio.create_task(claim_window())  # <-- run the window in background
 
-                        channel_id = interaction.channel.id
-                        tracker = self.cog.activity_tracker[channel_id]
-                        tracker["last_drop"] = time.time()
-
-                        # rebuild the entire container layout (your version)
-                        messages = {
-                            "Santa Claus": "Ho ho ho! A special visitor has arrived! Hurry and collect it before he goes away!",
-                            "Christmas Tree": "Grab it quickly before anyone to add some cheer!",
-                            "Coal": "Uh oh! This is not the gift that I wanted!",
-                            "Grinch": "Yikes! The Grinch is here! Better hide those gifts away!",
-                        }
-                        drop_message = messages.get(self.drop_type["name"], "You found something interesting!")
-
-                        messages_2 = {
-                            "Santa Claus": "You are on the nice list! You got a special gift!",
-                            "Christmas Tree": "That's a lovely gift to brighten the season!",
-                            "Coal": "Oops! Looks like you're on the naughty list this year!",
-                            "Grinch": "Oh no! The Grinch got you! Better luck next time!",
-                        }
-                        append_message = messages_2.get(self.drop_type["name"], "You found something interesting!")
-
-                        new_container = ui.Container(
-                            ui.TextDisplay(f"# {self.drop_type['emoji']} A {self.drop_type['name']} just appeared!"),
-                            ui.TextDisplay(f"{drop_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"),
-                            ui.Separator(spacing=discord.SeparatorSpacing.large, visible=True),
-                            ui.TextDisplay(
-                                f"🎉 {interaction.user.mention} claimed the {self.drop_type['emoji']} **{self.drop_type['name']}**! {append_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"
-                            )
-                        )
-                        new_view = ui.LayoutView(timeout=None)
-                        new_view.add_item(new_container)
-
-                        # edit message instantly (no defer lag)
-                        try:
-                            await interaction.response.edit_message(view=new_view)
-                        except Exception as e:
-                            print(f"Error editing message: {e}")
-
-                        # start background cooldown reset after claim (non-blocking)
-                        async def _post_claim_cooldown(channel_id_local, tracker_local):
-                            try:
-                                # Immediately stop counting new activity if you want:
-                                # (set a flag the on_message checks, OR rely on tracker["last_drop"] checks)
-                                # example: set a guard flag (optional)
-                                # self.cog._tracking_paused = True
-
-                                await asyncio.sleep(self.cog.drop_cooldown)  # non-blocking for callback
-
-                                # reset tracker state after cooldown
-                                if tracker_local is not None:
-                                    tracker_local["users"].clear()
-                                    tracker_local["count"] = 0
-                                    # optionally reset last_drop if you want:
-                                    # tracker_local["last_drop"] = 0
-
-                                # re-enable tracking guard if you used one:
-                                # self.cog._tracking_paused = False
-
-                                print(f"Cooldown ended for channel {channel_id_local}")
-                            except Exception as e:
-                                print(f"Post-claim cooldown task error: {e}")
+                        # append user to pending_claims
+                        self.pending_claims.add(interaction.user)
 
                         try:
-                            asyncio.create_task(_post_claim_cooldown(channel_id, tracker))
-                        except Exception as e:
-                            print(f"Failed to start cooldown task: {e}")
+                            await interaction.response.defer()
+                        except:
+                            pass
+
 
                     button.callback = make_callback
                 else:
@@ -186,6 +125,95 @@ class ChristmasEvent(commands.Cog):
 
             self.container.add_item(row)
             self.add_item(self.container)
+
+        async def finish_claim(self):
+            import random
+            if self.claimed or not self.pending_claims:
+                return
+
+            self.claimed = True
+            winner = random.choice(list(self.pending_claims))
+
+            # instantly disable all buttons so no one else can click
+            for child in self.container.children:
+                if isinstance(child, ui.ActionRow):
+                    for btn in child.children:
+                        btn.disabled = True
+
+            # record gift in a thread-safe way
+            await asyncio.to_thread(
+                self.data.record_gift,
+                winner.id,
+                self.drop_type["gifts"],
+                self.drop_type.get("name"),
+            )
+
+            channel_id = self.message.channel.id
+            tracker = self.cog.activity_tracker[channel_id]
+            tracker["last_drop"] = time.time()
+
+            # rebuild the entire container layout (your version)
+            messages = {
+                "Santa Claus": "Ho ho ho! A special visitor has arrived! Hurry and collect it before he goes away!",
+                "Christmas Tree": "Grab it quickly before anyone to add some cheer!",
+                "Coal": "Uh oh! This is not the gift that I wanted!",
+                "Grinch": "Yikes! The Grinch is here! Better hide those gifts away!",
+            }
+            drop_message = messages.get(self.drop_type["name"], "You found something interesting!")
+
+            messages_2 = {
+                "Santa Claus": "You are on the nice list! You got a special gift!",
+                "Christmas Tree": "That's a lovely gift to brighten the season!",
+                "Coal": "Oops! Looks like you're on the naughty list this year!",
+                "Grinch": "Oh no! The Grinch got you! Better luck next time!",
+            }
+            append_message = messages_2.get(self.drop_type["name"], "You found something interesting!")
+
+            new_container = ui.Container(
+                ui.TextDisplay(f"# {self.drop_type['emoji']} A {self.drop_type['name']} just appeared!"),
+                ui.TextDisplay(f"{drop_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"),
+                ui.Separator(spacing=discord.SeparatorSpacing.large, visible=True),
+                ui.TextDisplay(
+                    f"🎉 {winner.mention} claimed the {self.drop_type['emoji']} **{self.drop_type['name']}**! {append_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"
+                )
+            )
+            new_view = ui.LayoutView(timeout=None)
+            new_view.add_item(new_container)
+
+            # edit message instantly (no defer lag)
+            try:
+                await self.message.edit(view=new_view)
+            except Exception as e:
+                print(f"Error editing message: {e}")
+
+            # start background cooldown reset after claim (non-blocking)
+            async def _post_claim_cooldown(channel_id_local, tracker_local):
+                try:
+                    # Immediately stop counting new activity if you want:
+                    # (set a flag the on_message checks, OR rely on tracker["last_drop"] checks)
+                    # example: set a guard flag (optional)
+                    # self.cog._tracking_paused = True
+
+                    await asyncio.sleep(self.cog.drop_cooldown)  # non-blocking for callback
+
+                    # reset tracker state after cooldown
+                    if tracker_local is not None:
+                        tracker_local["users"].clear()
+                        tracker_local["count"] = 0
+                        # optionally reset last_drop if you want:
+                        # tracker_local["last_drop"] = 0
+
+                    # re-enable tracking guard if you used one:
+                    # self.cog._tracking_paused = False
+
+                    print(f"Cooldown ended for channel {channel_id_local}")
+                except Exception as e:
+                    print(f"Post-claim cooldown task error: {e}")
+
+            try:
+                asyncio.create_task(_post_claim_cooldown(channel_id, tracker))
+            except Exception as e:
+                print(f"Failed to start cooldown task: {e}")
 
         async def on_timeout(self):
             try:
