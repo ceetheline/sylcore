@@ -28,9 +28,9 @@ class ChristmasEvent(commands.Cog):
 
         # Drop config
         self.drop_types = [
-            {"name": "Santa Claus", "emoji": "🎅", "gifts": +3, "weight": 5},
+            {"name": "Santa Claus", "emoji": "🎅", "gifts": +3, "weight": 10},
             {"name": "Christmas Tree", "emoji": "🎄", "gifts": +1, "weight": 60},
-            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 25},
+            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 20},
             {"name": "Grinch", "emoji": "👺", "gifts": -3, "weight": 10},
         ]
 
@@ -99,7 +99,7 @@ class ChristmasEvent(commands.Cog):
                             self.pending_claims = set()
 
                             async def claim_window():
-                                await asyncio.sleep(0.25)  # wait for others to click
+                                await asyncio.sleep(0.45)  # wait for others to click
                                 await self.finish_claim()  # <-- only call here, after window
 
                             asyncio.create_task(claim_window())  # <-- run the window in background
