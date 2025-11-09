@@ -99,7 +99,7 @@ class ChristmasEvent(commands.Cog):
                             self.pending_claims = set()
 
                             async def claim_window():
-                                await asyncio.sleep(0.6)  # wait for others to click
+                                await asyncio.sleep(0.55)  # wait for others to click
                                 await self.finish_claim()  # <-- only call here, after window
 
                             asyncio.create_task(claim_window())  # <-- run the window in background
