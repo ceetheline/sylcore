@@ -29,8 +29,8 @@ class ChristmasEvent(commands.Cog):
         # Drop config
         self.drop_types = [
             {"name": "Santa Claus", "emoji": "🎅", "gifts": +3, "weight": 10},
-            {"name": "Christmas Tree", "emoji": "🎄", "gifts": +1, "weight": 60},
-            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 20},
+            {"name": "Christmas Tree", "emoji": "🎄", "gifts": +1, "weight": 55},
+            {"name": "Coal", "emoji": "🪨", "gifts": -1, "weight": 25},
             {"name": "Grinch", "emoji": "👺", "gifts": -3, "weight": 10},
         ]
 
