@@ -35,10 +35,10 @@ class ChristmasEvent(commands.Cog):
         ]
 
         # Settings
-        self.min_messages = 10
+        self.min_messages = 11
         self.max_messages = 25
         self.min_unique_users = 2
-        self.same_user_cooldown = 1
+        self.same_user_cooldown = 3
         self.drop_cooldown = 10
         self.event_active = False
 
@@ -60,18 +60,8 @@ class ChristmasEvent(commands.Cog):
             self.claim_window_open = False
             self.pending_claims = set()
 
-            # container layout
-            messages = {
-                "Santa Claus": "Ho ho ho! A special visitor has arrived! Hurry and collect it before he goes away!",
-                "Christmas Tree": "Grab it quickly before anyone to add some cheer!",
-                "Coal": "Uh oh! This is not the gift that I wanted!",
-                "Grinch": "Yikes! The Grinch is here! Better hide those gifts away!",
-            }
-
-            drop_message = messages.get(self.drop_type["name"], "You found something interesting!")
-            
-            self.container = ui.Container(ui.TextDisplay(f"# {drop_type['emoji']} A {drop_type['name']} just appeared!"))
-            self.container.add_item(ui.TextDisplay(f"{drop_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"))
+            self.container = ui.Container(ui.TextDisplay(f"# 🎁 A Mysterious Gift just appeared!"))
+            self.container.add_item(ui.TextDisplay("✨ Click it to reveal your surprise!"))
             self.container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.large, visible=True))
 
             # button row
@@ -112,8 +102,8 @@ class ChristmasEvent(commands.Cog):
                         except:
                             pass
 
-
                     button.callback = make_callback
+
                 else:
                     button = ui.Button(
                         style=discord.ButtonStyle.secondary,
@@ -152,15 +142,6 @@ class ChristmasEvent(commands.Cog):
             tracker = self.cog.activity_tracker[channel_id]
             tracker["last_drop"] = time.time()
 
-            # rebuild the entire container layout (your version)
-            messages = {
-                "Santa Claus": "Ho ho ho! A special visitor has arrived! Hurry and collect it before he goes away!",
-                "Christmas Tree": "Grab it quickly before anyone to add some cheer!",
-                "Coal": "Uh oh! This is not the gift that I wanted!",
-                "Grinch": "Yikes! The Grinch is here! Better hide those gifts away!",
-            }
-            drop_message = messages.get(self.drop_type["name"], "You found something interesting!")
-
             messages_2 = {
                 "Santa Claus": "You are on the nice list! You got a special gift!",
                 "Christmas Tree": "That's a lovely gift to brighten the season!",
@@ -170,8 +151,8 @@ class ChristmasEvent(commands.Cog):
             append_message = messages_2.get(self.drop_type["name"], "You found something interesting!")
 
             new_container = ui.Container(
-                ui.TextDisplay(f"# {self.drop_type['emoji']} A {self.drop_type['name']} just appeared!"),
-                ui.TextDisplay(f"{drop_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"),
+                ui.TextDisplay(f"# 🎁 A Mysterious Gift just appeared!"),
+                ui.TextDisplay("✨ Someone clicked to reveal it!"),
                 ui.Separator(spacing=discord.SeparatorSpacing.large, visible=True),
                 ui.TextDisplay(
                     f"🎉 {winner.mention} claimed the {self.drop_type['emoji']} **{self.drop_type['name']}**! {append_message} **`{'+' if self.drop_type['gifts'] > 0 else ''}{self.drop_type['gifts']}`**🎁"
@@ -214,6 +195,7 @@ class ChristmasEvent(commands.Cog):
                 asyncio.create_task(_post_claim_cooldown(channel_id, tracker))
             except Exception as e:
                 print(f"Failed to start cooldown task: {e}")
+
 
         async def on_timeout(self):
             try:
