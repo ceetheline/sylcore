@@ -17,7 +17,7 @@ STAGE_MESSAGES = {
 }
 
 COOLDOWN_SECONDS = 1   # avoid spam
-RESET_AFTER = 30       # reset warning stage after 30s
+RESET_AFTER = 300       # reset warning stage after 30s
 
 
 class WarningView(ui.LayoutView):
