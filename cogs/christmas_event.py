@@ -26,6 +26,8 @@ class ChristmasEvent(commands.Cog):
         self.activity_tracker = defaultdict(lambda: {"users": set(), "count": 0, "last_drop": 0})
         self.user_last_message = {}
 
+        self.message_counts = {}  # user_id -> count
+
         # Drop config
         self.drop_types = [
             {"name": "Santa Claus", "emoji": "🎅", "gifts": +3, "weight": 10},
@@ -36,8 +38,8 @@ class ChristmasEvent(commands.Cog):
 
         # Settings
         self.min_messages = 11
-        self.max_messages = 25
-        self.min_unique_users = 2
+        self.max_messages = 20
+        self.min_unique_users = 3
         self.same_user_cooldown = 3
         self.drop_cooldown = 10
         self.event_active = False
@@ -203,15 +205,24 @@ class ChristmasEvent(commands.Cog):
             except:
                 pass
 
-    # --- DROP LOGIC ---
-    def calculate_drop_chance(self, active_users_count, message_count):
+        # --- DROP LOGIC ---
+    def calculate_drop_chance(self, active_users, message_count):
+        if active_users < self.min_unique_users:
+            return 0
+
         if message_count < self.min_messages:
             return 0
-        base_chance = min((message_count - self.min_messages + 1) * 5, 50)
-        if active_users_count >= self.min_unique_users:
-            user_bonus = (active_users_count - self.min_unique_users) * 10
-            return min(base_chance + user_bonus, 80)
-        return 0
+        if message_count > self.max_messages:
+            message_count = self.max_messages
+
+        base_chance = random.randint(1, 10)
+
+        if active_users > 3:
+            extra = active_users - 3
+            boost = random.randint(5, 15) * extra
+            base_chance += boost
+
+        return min(base_chance, 80)
 
     def get_random_drop(self):
         weights = [d["weight"] for d in self.drop_types]
@@ -258,9 +269,36 @@ class ChristmasEvent(commands.Cog):
         current_time = time.time()
         user_id = message.author.id
 
+        # track messages
+        self.message_counts[user_id] = self.message_counts.get(user_id, 0) + 1
+        # 1. CHECK FOR SELF-TALK RESET
+        if len(self.message_counts) == 1:  # only one person chatting
+            only_user = list(self.message_counts.keys())[0]
+            if self.message_counts[only_user] >= 3:
+                # reset because this person is talking alone
+                self.message_counts.clear()
+                return
+
+        # 2. FILTER VALID USERS (non-spammers)
+        valid_users = [
+            uid for uid, count in self.message_counts.items()
+            if 1 <= count <= 2
+        ]
+
+        # 3. TRIGGER DROP IF CONDITIONS MET
+        if len(valid_users) >= 3:  # at least 3 real participants
+            print("🎄 Trigger: enough users chatting, starting drop calculation")
+            
+            # Reset counts so new chat cycle is tracked properly
+            self.message_counts.clear()
+
+            # Continue into drop logic below
+        else:
+            return  # not enough active real users yet
+
+        # rate-limit spammy same-user messages
         if user_id in self.user_last_message:
-            time_diff = current_time - self.user_last_message[user_id]
-            if time_diff < self.same_user_cooldown:
+            if current_time - self.user_last_message[user_id] < self.same_user_cooldown:
                 return
         self.user_last_message[user_id] = current_time
 

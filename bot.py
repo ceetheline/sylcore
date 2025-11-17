@@ -32,9 +32,17 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,  # can be watching, playing, listening, etc.
-            name="over the gifts 👀"  # whatever you want it to show
+            name="The members are going to naughty list 😑"  # whatever you want it to show
         )
     )
+
+
+# Load the Header warning
+async def setup_hook(self):
+    await self.load_extension("header_warning")
+
+async def load_cogs():
+    await bot.load_extension("warn_system")
 
 
 # Load all cogs from the 'cogs' folder
