@@ -38,8 +38,8 @@ class ChristmasEvent(commands.Cog):
 
         # Settings
         self.min_messages = 11
-        self.max_messages = 20
-        self.min_unique_users = 3
+        self.max_messages = 18
+        self.min_unique_users = 2
         self.same_user_cooldown = 3
         self.drop_cooldown = 10
         self.event_active = False
@@ -274,7 +274,7 @@ class ChristmasEvent(commands.Cog):
         # 1. CHECK FOR SELF-TALK RESET
         if len(self.message_counts) == 1:  # only one person chatting
             only_user = list(self.message_counts.keys())[0]
-            if self.message_counts[only_user] >= 3:
+            if self.message_counts[only_user] >= 4:
                 # reset because this person is talking alone
                 self.message_counts.clear()
                 return
@@ -282,11 +282,11 @@ class ChristmasEvent(commands.Cog):
         # 2. FILTER VALID USERS (non-spammers)
         valid_users = [
             uid for uid, count in self.message_counts.items()
-            if 1 <= count <= 2
+            if 1 <= count <= 3
         ]
 
         # 3. TRIGGER DROP IF CONDITIONS MET
-        if len(valid_users) >= 3:  # at least 3 real participants
+        if len(valid_users) >= 2:  # at least 2 real participants
             print("🎄 Trigger: enough users chatting, starting drop calculation")
             
             # Reset counts so new chat cycle is tracked properly
