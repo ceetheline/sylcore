@@ -236,10 +236,10 @@ class ChristmasEvent(commands.Cog):
             if not self.event_active:
                 self.event_active = True
                 print("🎄 Christmas event is now ACTIVE!")
-        elif (now.month == 12 and now.day == 24 and now.hour == 12) or (now.month == 1 and now.day == 4):
+        elif (now.month == 12):
             if self.event_active:
                 self.event_active = False
-                print("🎄 Christmas event has ENDED! Happy Holidays!")
+                print("🎄 Christmas event has ENDED! You didn't know?")
         else:
             if self.event_active:
                 self.event_active = False
@@ -269,32 +269,42 @@ class ChristmasEvent(commands.Cog):
         current_time = time.time()
         user_id = message.author.id
 
-        # track messages
+        # Track messages per-user
         self.message_counts[user_id] = self.message_counts.get(user_id, 0) + 1
-        # 1. CHECK FOR SELF-TALK RESET
-        if len(self.message_counts) == 1:  # only one person chatting
-            only_user = list(self.message_counts.keys())[0]
-            if self.message_counts[only_user] >= 4:
-                # reset because this person is talking alone
-                self.message_counts.clear()
-                return
 
-        # 2. FILTER VALID USERS (non-spammers)
+        # Track last user speaking
+        last_user = getattr(self, "last_user", None)
+        consecutive = getattr(self, "consecutive_messages", 0)
+
+        if last_user == user_id:
+            consecutive += 1
+        else:
+            consecutive = 1
+            self.last_user = user_id
+
+        self.consecutive_messages = consecutive
+
+        # SOLO-SPAM RESET
+        if consecutive >= 4 and len(self.message_counts) == 1:
+            self.message_counts[user_id] = 0
+            self.consecutive_messages = 0
+            return
+
+        # CHECK for real participants
         valid_users = [
             uid for uid, count in self.message_counts.items()
             if 1 <= count <= 3
         ]
 
-        # 3. TRIGGER DROP IF CONDITIONS MET
-        if len(valid_users) >= 2:  # at least 2 real participants
+        if len(valid_users) >= 2:
             print("🎄 Trigger: enough users chatting, starting drop calculation")
-            
-            # Reset counts so new chat cycle is tracked properly
-            self.message_counts.clear()
 
-            # Continue into drop logic below
+            # Reset the chat cycle properly
+            self.message_counts.clear()
+            self.last_user = None
+            self.consecutive_messages = 0
         else:
-            return  # not enough active real users yet
+            return
 
         # rate-limit spammy same-user messages
         if user_id in self.user_last_message:
@@ -315,6 +325,7 @@ class ChristmasEvent(commands.Cog):
         if drop_chance > 0 and random.randint(1, 100) <= drop_chance:
             if current_time - tracker["last_drop"] < self.drop_cooldown:
                 return
+
             tracker["last_drop"] = time.time()
             tracker["users"].clear()
             tracker["count"] = 0
@@ -324,6 +335,7 @@ class ChristmasEvent(commands.Cog):
             view = self.GiftDropView(self, drop, active_slot, None, data)
             sent = await message.channel.send(view=view)
             view.message = sent
+
 
     # --- COMMANDS ---
     @discord.app_commands.command(name="leaderboard", description="Show the top 10 gift collectors")
