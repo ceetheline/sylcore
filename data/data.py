@@ -14,6 +14,109 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ==========================
+# WARNING SYSTEM
+# ==========================
+
+import datetime
+from typing import Dict
+
+MAX_WARNINGS = 6
+
+WARNING_TYPES = {
+    "Minor Offense": 0,
+    "Normal Offense": 0,
+    "Major Offense": 2
+}
+
+# cache: user_id -> total warnings
+warning_totals: Dict[str, int] = {}
+
+
+# --------------------------
+# LOAD WARNING TOTALS
+# --------------------------
+def load_warning_data():
+    global warning_totals
+    print("[warnings] Loading warning totals from Supabase...")
+
+    resp = supabase.table("warning_users").select("*").execute()
+    rows = resp.data or []
+
+    warning_totals = {str(r["user_id"]): int(r["total"]) for r in rows}
+    print(f"[warnings] Loaded {len(warning_totals)} users.")
+
+# Add a warning
+def record_warning(user_id: int, moderator_id: int, reason: str, severity: str) -> int:
+    uid = str(user_id)
+    now = datetime.datetime.utcnow().isoformat()
+
+    # 1️⃣ ensure user exists in warning_users FIRST
+    current_total = warning_totals.get(uid, 0)
+
+    supabase.table("warning_users").upsert({
+        "user_id": user_id,
+        "total": current_total,
+        "updated_at": now
+    }).execute()
+
+    # 2️⃣ insert warning history
+    supabase.table("warnings").insert({
+        "user_id": user_id,
+        "count": 1,
+        "limit": MAX_WARNINGS,
+        "severity": severity,
+        "reasons": reason,
+        "moderators": moderator_id,
+        "last_warned": now
+    }).execute()
+
+    # 3️⃣ update total
+    total = current_total + 1
+    warning_totals[uid] = total
+
+    supabase.table("warning_users").update({
+        "total": total,
+        "updated_at": now
+    }).eq("user_id", user_id).execute()
+
+    return total
+
+
+# Get total warnings for user
+def get_warning_total(user_id: int) -> int:
+    uid = str(user_id)
+
+    if uid in warning_totals:
+        return warning_totals[uid]
+
+    resp = supabase.table("warning_users").select("total").eq("user_id", user_id).execute()
+    if resp.data:
+        total = int(resp.data[0]["total"])
+        warning_totals[uid] = total
+        return total
+
+    return 0
+
+# Reset warnings
+def reset_warnings(user_id: int):
+    uid = str(user_id)
+    now = datetime.datetime.utcnow().isoformat()
+
+    warning_totals[uid] = 0
+
+    supabase.table("warnings").delete().eq("user_id", user_id).execute()
+    supabase.table("warning_users").upsert({
+        "user_id": user_id,
+        "total": 0,
+        "updated_at": now
+    }).execute()
+
+
+
+
+
+# CHRISTMAS EVENT ONLY
 gifts: Dict[str, int] = {}
 history: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -144,3 +247,4 @@ def reset():
 
 # Load once on import
 load_data()
+load_warning_data()

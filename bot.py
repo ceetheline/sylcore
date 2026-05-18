@@ -13,6 +13,10 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+### TEXT & EMOJI SPAM BLOCKER TRACKER ###
+bot.shared_violation_tracker = {}
+### --------------------------------- ###
+
 @bot.event
 async def on_ready():
     print(f"✅ Bot is online!")
@@ -31,27 +35,21 @@ async def on_ready():
 
     await bot.change_presence(
         activity=discord.Activity(
-            type=discord.ActivityType.watching,  # can be watching, playing, listening, etc.
-            name="The members are going to naughty list 😑"  # whatever you want it to show
+            type=discord.ActivityType.custom,  # can be watching, playing, listening, etc.
+            name="custom",  # The 'name' is often ignored for custom types
+            state="bot recode." # This is where the actual text goes
         )
     )
 
 
-# Load the Header warning
-async def setup_hook(self):
-    await self.load_extension("header_warning")
 
+# Load all cogs in ./cogs folder
 async def load_cogs():
-    await bot.load_extension("warn_system")
-
-
-# Load all cogs from the 'cogs' folder
-async def load_cogs():
-    for filename in os.listdir('./cogs'):
-        if filename.endswith('.py'):
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py"):
             cog_name = filename[:-3]
             try:
-                await bot.load_extension(f'cogs.{cog_name}')
+                await bot.load_extension(f"cogs.{cog_name}")
                 print(f"✅ Loaded cog: {cog_name}")
             except Exception as e:
                 print(f"❌ Failed to load cog {cog_name}: {e}")

@@ -4,3 +4,5 @@ python-dotenv
 py-cord
 flask
 supabase
+emoji
+regex
