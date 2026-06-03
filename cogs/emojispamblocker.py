@@ -63,18 +63,11 @@ class EmojiSpamBlocker(commands.Cog):
 
         return cleaned_length, total_emojis, is_pure_emoji
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        # 1. Ignore if it's a DM or sent by a bot
-        if not message.guild or message.author.bot:
-            return
-
-        # 2. Whitelist Check (Owner, Developers, and Administrators)
-        if message.author.id == self.owner_ids or message.author.id in self.dev_ids:
-            return
-        if message.author.guild_permissions.administrator:
-            return
-
+    async def _process_message_spam(self, message: discord.Message):
+        """
+        Central processing core handling calculations, strike tracking,
+        and moderation actions for new and edited text payloads.
+        """
         current_time = time.time()
         user_id = message.author.id
 
@@ -189,6 +182,43 @@ class EmojiSpamBlocker(commands.Cog):
                     warning_msg,
                     delete_after=10 # Automatically deletes the bot's warning after 10s to avoid clutter
                 )
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        # 1. Ignore if it's a DM or sent by a bot
+        if not message.guild or message.author.bot:
+            return
+
+        # 2. Whitelist Check (Owner, Developers, and Administrators)
+        if message.author.id == self.owner_ids or message.author.id in self.dev_ids:
+            return
+        if message.author.guild_permissions.administrator:
+            return
+
+        # Forward the message to the core process function
+        await self._process_message_spam(message)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        """
+        Listens for message updates and channels edited text to the spam tracker.
+        """
+        # 1. Ignore DMs or actions triggered by bots
+        if not after.guild or after.author.bot:
+            return
+
+        # 2. Whitelist Check (Instantly passes server admins, owners, and developers)
+        if after.author.id in self.owner_ids or after.author.id in self.dev_ids:
+            return
+        if after.author.guild_permissions.administrator:
+            return
+
+        # 3. Prevent duplicate scanning if the text did not change (e.g. embed updates)
+        if before.content == after.content:
+            return
+
+        # Forward the newly edited message variant to the core process function
+        await self._process_message_spam(after)
 
 # Setup function to load cog
 async def setup(bot):
