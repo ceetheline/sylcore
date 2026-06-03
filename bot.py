@@ -37,7 +37,7 @@ async def on_ready():
         activity=discord.Activity(
             type=discord.ActivityType.custom,  # can be watching, playing, listening, etc.
             name="custom",  # The 'name' is often ignored for custom types
-            state="bot recode." # This is where the actual text goes
+            state="watching the server." # This is where the actual text goes
         )
     )
 
